@@ -4,11 +4,16 @@ out gl_PerVertex {
     vec4 gl_Position;
 };
 
-layout(set = 0, binding = 0) buffer Particles {
-    vec3[] positions;
-    vec3[] velocities;
+struct Particle {
+    vec3 position;
+    vec3 velocity;
+};
+
+layout(set = 0, binding = 0) buffer Data {
+    Particle data[];
 };
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
+    data[gl_VertexIndex].position += data[gl_VertexIndex].velocity;
+    gl_Position = vec4(data[gl_VertexIndex].position, 1.0);
 }

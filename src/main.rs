@@ -12,49 +12,43 @@ struct Particle {
 fn main() {
     run(vec![
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.1, 0.0, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.5, 0.5, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
         Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
-        },
-        Particle {
-            pos: [1.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
-        },
-        Particle {
-            pos: [10.0, 0.0, 2.0],
-            vel: [1.0, 0.0, 2.0],
+            pos: [0.2, 0.2, 0.0],
+            vel: [0.1, 0.0, 0.2],
         },
     ]);
 }
 
 fn run(particles: Vec<Particle>) {
+    let particles_size = std::mem::size_of::<Particle>() as u64;
+
     env_logger::init();
     let event_loop = EventLoop::new();
 
@@ -116,13 +110,21 @@ fn run(particles: Vec<Particle>) {
             .unwrap(),
     );
 
-    // Create a new buffer for the particles
-    let particle_buf = device
+    // Create a new buffer
+    let staging_buffer = device
         .create_buffer_mapped(
             particles.len(),
-            wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::COPY_SRC,
         )
         .fill_from_slice(&particles);
+
+    // Create a new buffer
+    let storage_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        size: particles_size,
+        usage: wgpu::BufferUsage::MAP_READ
+            | wgpu::BufferUsage::COPY_DST
+            | wgpu::BufferUsage::COPY_SRC,
+    });
 
     // Describe the buffers that will be available to the GPU
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -130,8 +132,11 @@ fn run(particles: Vec<Particle>) {
             // Particle data
             wgpu::BindGroupLayoutBinding {
                 binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX,
-                ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                visibility: wgpu::ShaderStage::COMPUTE | wgpu::ShaderStage::VERTEX,
+                ty: wgpu::BindingType::StorageBuffer {
+                    dynamic: false,
+                    readonly: false,
+                },
             },
         ],
     });
@@ -144,7 +149,7 @@ fn run(particles: Vec<Particle>) {
             wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
-                    buffer: &particle_buf,
+                    buffer: &storage_buffer,
                     range: 0..particles.len() as u64,
                 },
             },
@@ -183,25 +188,7 @@ fn run(particles: Vec<Particle>) {
         }],
         depth_stencil_state: None,
         index_format: wgpu::IndexFormat::Uint16,
-        vertex_buffers: &[wgpu::VertexBufferDescriptor {
-            stride: std::mem::size_of::<Particle>() as u64,
-            step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[
-                // Pos
-                wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Float3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                // Vel
-                wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Float3,
-                    // 3 coordinate components with 4 bytes each
-                    offset: 3 * 4,
-                    shader_location: 1,
-                },
-            ],
-        }],
+        vertex_buffers: &[],
         sample_count: 1,
         sample_mask: !0,
         alpha_to_coverage_enabled: false,
@@ -244,6 +231,13 @@ fn run(particles: Vec<Particle>) {
                 let frame = swap_chain.get_next_texture();
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+                encoder.copy_buffer_to_buffer(
+                    &staging_buffer,
+                    0,
+                    &storage_buffer,
+                    0,
+                    particles_size,
+                );
                 {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -257,9 +251,15 @@ fn run(particles: Vec<Particle>) {
                     });
                     rpass.set_pipeline(&render_pipeline);
                     rpass.set_bind_group(0, &bind_group, &[]);
-                    rpass.set_vertex_buffers(0, &[(&particle_buf, 0)]);
-                    rpass.draw(0..3, 0..1);
+                    rpass.draw(0..particles.len() as u32, 0..1);
                 }
+                encoder.copy_buffer_to_buffer(
+                    &storage_buffer,
+                    0,
+                    &staging_buffer,
+                    0,
+                    particles_size,
+                );
 
                 device.get_queue().submit(&[encoder.finish()]);
             }
