@@ -116,6 +116,7 @@ fn run(particles: Vec<Particle>) {
             .unwrap(),
     );
 
+    // Create a new buffer for the particles
     let particle_buf = device
         .create_buffer_mapped(
             particles.len(),
@@ -123,18 +124,23 @@ fn run(particles: Vec<Particle>) {
         )
         .fill_from_slice(&particles);
 
+    // Describe the buffers that will be available to the GPU
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        bindings: &[wgpu::BindGroupLayoutBinding {
-            binding: 0,
-            visibility: wgpu::ShaderStage::VERTEX,
-            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-        }],
+        bindings: &[
+            // Particle data
+            wgpu::BindGroupLayoutBinding {
+                binding: 0,
+                visibility: wgpu::ShaderStage::VERTEX,
+                ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+            },
+        ],
     });
 
+    // Create the resources described by the bind_group_layout
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         layout: &bind_group_layout,
         bindings: &[
-            // Pass particle data to vertex shader
+            // Particle data
             wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
@@ -144,10 +150,13 @@ fn run(particles: Vec<Particle>) {
             },
         ],
     });
+
+    // Combine all bind_group_layouts
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         bind_group_layouts: &[&bind_group_layout],
     });
 
+    // Describe the rendering process
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         layout: &pipeline_layout,
         vertex_stage: wgpu::ProgrammableStageDescriptor {
@@ -249,7 +258,7 @@ fn run(particles: Vec<Particle>) {
                     rpass.set_pipeline(&render_pipeline);
                     rpass.set_bind_group(0, &bind_group, &[]);
                     rpass.set_vertex_buffers(0, &[(&particle_buf, 0)]);
-                    rpass.draw(0..10, 0..1);
+                    rpass.draw(0..3, 0..1);
                 }
 
                 device.get_queue().submit(&[encoder.finish()]);
